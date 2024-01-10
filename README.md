@@ -56,7 +56,7 @@ EPP definitely helps. The others, depends.
 
 ## Installation
 
-Run ```bash install.sh``` with root privileges. A new service will be enabled: pp-enhancer.service. By default, every 2 seconds it will check if your system needs changes and applies them. You can configure the duration between checks and more by modifying the /etc/pp-enhancer.ini file
+Run ```bash install.sh``` with root privileges. A new service will be enabled: pp-enhancer.service. By default, every 2 seconds it will check if your system needs changes and applies them. You can configure the duration between checks and more by modifying the /etc/pp-enhancer.ini file. Make sure to restart the pp-enhancer.service after changing your configuration
 
 ## Configuration explained
 
