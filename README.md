@@ -1,16 +1,16 @@
 ## Power Profiles Enhancer
 
-This was born as a personal fork of https://github.com/marcinx64/pp-to-amd-epp/tree/main and then evolved out of its
+This was a personal fork of https://github.com/marcinx64/pp-to-amd-epp/tree/main and then evolved out of its
 scope, thus pp-enhancer was born.
 
-From kernel 6.5+ AMD-PSTATE in active mode as default CPU driver on ZEN2+ machines
+From kernel 6.5+ there's AMD-PSTATE in active mode as default CPU driver on ZEN2+ machines
 
 Power Profiles Daemon cannot talk to AMD-PSTATE driver directly leaving it unmanaged and inconsistent with whole system
 energy profile. Moreover, power profiles does not change power limits, governors and DPM for the iGPU.
 
 This project is aiming to close this gap with monitoring Power Profiles current mode in the background and setting:
 
-* Corresponding EPP profile for CPU
+* Corresponding EPP profile for CPU.
 * Corresponding governor for CPU
 * Corresponding TDP limits for CPU
 * Corresponding DPM level for iGPU
