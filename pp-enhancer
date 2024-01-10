@@ -1,0 +1,488 @@
+#!/usr/bin/env python3
+import os
+import sys
+import time
+import logging
+import subprocess
+import configparser
+from enum import Enum
+from typing import Union
+
+
+class RyzenAdjLimit(Enum):
+    """
+    Enum representing the possible Ryzenadj Limits: sustained, slow and fast
+    """
+    STAPM = 'STAPM LIMIT', 'stapm-limit'
+    SLOW = 'PPT LIMIT SLOW', 'slow-limit'
+    FAST = 'PPT LIMIT FAST', 'fast-limit'
+
+    def __init__(self, key_name, argument):
+        self.key_name = key_name
+        self.argument = argument
+
+
+class Enabler(Enum):
+    """
+    Configs of the "enablers" section
+    """
+    MODIFY_EPP = 'modify_epp', True
+    MODIFY_DPM = 'modify_dpm', False
+    ALLOW_LOW_DPM = 'allow_low_dpm', False
+    ALLOW_HIGH_DPM = 'allow_high_dpm', False
+    MODIFY_POWERSAVE_TDP_LIMIT = 'modify_powersave_tdp_limit', False
+    MODIFY_BALANCED_TDP_LIMIT = 'modify_balanced_tdp_limit', False
+    MODIFY_PERFORMANCE_TDP_LIMIT = 'modify_performance_tdp_limit', False
+    USE_BALANCE_POWER = 'use_balance_power', False
+    USE_PERFORMANCE_GOVERNOR = 'use_performance_governor', False
+    # Currently unused
+    RYZEN_POWERSAVE_ON_AC = 'ryzen_powersave_on_ac', False
+    # Currently unused
+    RYZEN_PERFORMANCE_ON_BATTERY = 'ryzen_performance_on_battery', False
+
+    def __init__(self, key_name: str, default_value: bool):
+        """
+        :param key_name: the name in the ini config
+        :param default_value: the default value
+        """
+        self.key_name = key_name
+        self.default_value = default_value
+
+    def ryzenadj_argument(self) -> Union[None, str]:
+        """
+        Returns the corresponding ryzenadj argument, if relevant
+        :return: None or the ryzenadj argument
+        """
+        argument = None
+        if self == Enabler.RYZEN_POWERSAVE_ON_AC:
+            argument = 'powersave'
+        elif self == Enabler.RYZEN_PERFORMANCE_ON_BATTERY:
+            argument = 'performance'
+        return argument
+
+
+class TdpLimit(Enum):
+    """
+    Configs of the "tdp-limit" section
+    """
+    POWERSAVE_SUSTAINED = 'powersave_sustained_limit', 10, RyzenAdjLimit.STAPM
+    POWERSAVE_SLOW = 'powersave_slow_limit', 10, RyzenAdjLimit.SLOW
+    POWERSAVE_FAST = 'powersave_fast_limit', 10, RyzenAdjLimit.FAST
+    BALANCED_SUSTAINED = 'balanced_sustained_limit', 45, RyzenAdjLimit.STAPM
+    BALANCED_SLOW = 'balanced_slow_limit', 45, RyzenAdjLimit.SLOW
+    BALANCED_FAST = 'balanced_fast_limit', 45, RyzenAdjLimit.FAST
+    PERFORMANCE_SUSTAINED = 'performance_sustained_limit', 62, RyzenAdjLimit.STAPM
+    PERFORMANCE_SLOW = 'performance_slow_limit', 62, RyzenAdjLimit.SLOW
+    PERFORMANCE_FAST = 'performance_fast_limit', 65, RyzenAdjLimit.FAST
+
+    def __init__(self, key_name: str, default_value: int, ryzenadj_limit: RyzenAdjLimit):
+        """
+        :param key_name: the name in the ini config
+        :param default_value: the default value
+        :param ryzenadj_limit: the related RyzenAdjLimit
+        """
+        self.key_name = key_name
+        self.default_value = default_value
+        self.ryzenadj_limit = ryzenadj_limit
+
+
+class Paths(Enum):
+    """
+    Paths
+    """
+    PATH_SCALING_GOV = '/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor'
+    PATH_AMD_PSTATE_STATUS = '/sys/devices/system/cpu/amd_pstate/status'
+    PATH_EPP = '/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference'
+    PATH_BATTERY = '/sys/class/power_supply/BAT0/status'
+    PATH_CONFIG = '/etc/pp-enhancer.ini'
+
+    def __init__(self, path: str):
+        self.path = path
+
+
+class Profiles(Enum):
+    """
+    The profiles
+    """
+    POWER_PLATFORM_PROFILES = ['power-saver', 'balanced', 'performance']
+    EPP_PROFILES = ['power', 'balance_power', 'balance_performance', 'performance']
+    GOV_PROFILES = ['powersave', 'performance']
+    DPM_PROFILES = ['low', 'auto', 'high']
+
+    def __init__(self, profiles: list):
+        self.profiles = profiles
+
+
+def create_default_configs() -> (dict, dict):
+    enablers_dict = {}
+    tdp_limits_dict = {}
+    for enabler in Enabler:
+        enablers_dict[enabler.key_name] = enabler.default_value
+    for tdp_limit in TdpLimit:
+        tdp_limits_dict[tdp_limit.key_name] = tdp_limit.default_value
+    return enablers_dict, tdp_limits_dict, {'sleep_duration': 2}
+
+
+def set_up_logger() -> logging.Logger:
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)
+
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    return logger
+
+
+log = set_up_logger()
+UID = os.getuid()
+enablers_config, tdp_limits_config, intervals = create_default_configs()
+DPM_PATH = ""
+
+
+def load_config() -> None:
+    """
+    It reads the config from PATH_CONFIG and uses its values, if any is present
+    :return: None
+    """
+    config_parser = configparser.ConfigParser()
+    config_parser.read(Paths.PATH_CONFIG.value)
+
+    try:
+        config_value = config_parser.getint('intervals', 'sleep_duration')
+        intervals['sleep_duration'] = config_value
+    except Exception:
+        log.warning(f'Could not parse config wait as int: default value {intervals["sleep_duration"]} will be used')
+
+    for key in enablers_config.keys():
+        try:
+            config_value = config_parser.getboolean('enablers', key)
+            enablers_config[key] = config_value
+        except Exception:
+            log.warning(f'Could not parse config {key} as bool: default value {enablers_config[key]} will be used')
+
+    for key in tdp_limits_config.keys():
+        try:
+            config_value = config_parser.getint('tdp-limits', key)
+            tdp_limits_config[key] = config_value
+        except Exception:
+            log.warning(f'Could not parse config {key} as int: default value {tdp_limits_config[key]} will be used')
+
+    try:
+        config_value = config_parser.get('paths', 'DPM')
+        global DPM_PATH
+        DPM_PATH = config_value
+    except Exception:
+        log.warning(f'Could not parse config DPM: DPM will be disabled')
+        enablers_config[Enabler.MODIFY_DPM.key_name] = False
+
+
+def get_battery_status() -> str:
+    battery_status = ""
+    try:
+        with open(Paths.PATH_BATTERY.path, 'r') as battery:
+            battery_status = battery.read().strip()
+    except FileNotFoundError:
+        log.warning('Cannot find battery')
+    return battery_status
+
+
+def get_current_power_profile() -> str:
+    current_power_profile = ""
+    try:
+        current_power_profile = subprocess.getoutput('powerprofilesctl get')
+    except FileNotFoundError:
+        log.error('Power Profiles Daemon not found on system')
+    return current_power_profile
+
+
+def get_current_gov_profile() -> str:
+    try:
+        with open(Paths.PATH_SCALING_GOV.path, 'r') as gov:
+            current_gov = gov.read().strip()
+            gov.close()
+    except FileNotFoundError:
+        log.warning(f'Scaling governor not available')
+    return current_gov
+
+
+def get_current_dpm_profile() -> str:
+    current_dpm = ""
+    try:
+        with open(DPM_PATH, 'r') as dpm:
+            current_dpm = dpm.read().strip()
+            dpm.close()
+    except FileNotFoundError:
+        log.warning(f'DPM not available. Disabling config...')
+        enablers_config[Enabler.MODIFY_DPM.key_name] = False
+    return current_dpm
+
+
+def get_current_epp_profile() -> str:
+    with open(Paths.PATH_EPP.path, 'r') as epp:
+        current_epp_profile = epp.read().strip()
+        epp.close()
+    return current_epp_profile
+
+
+def set_pp(power_profile: str) -> None:
+    """
+    Sets the power profile
+    :param power_profile: the power profile to set
+    :return: None
+    """
+    try:
+        if power_profile in Profiles.POWER_PLATFORM_PROFILES.profiles:
+            subprocess.call(['powerprofilesctl', 'set', f'{power_profile}'])
+    except FileNotFoundError:
+        log.error(f'Cannot set Power Profile to {power_profile}, powerprofilesctl not found')
+
+
+def set_gov_profile(gov_profile: str) -> None:
+    """
+    Sets the governor profile
+    :param gov_profile: the governor profile to set
+    :return: None
+    """
+    cpus = os.cpu_count()
+    if gov_profile in Profiles.GOV_PROFILES.profiles:
+        for cpu in range(cpus):
+            try:
+                with open(Paths.PATH_SCALING_GOV.path.replace('0', f'{cpu}'), 'w') as cpu_gov:
+                    cpu_gov.write(gov_profile)
+                    cpu_gov.close()
+            except OSError:
+                log.error('Cannot set governor profile')
+                exit(1)
+        log.info(f'Governor set to: {gov_profile}')
+
+
+def set_epp(epp_profile: str) -> None:
+    """
+    Sets the epp_profile
+    :param epp_profile: the epp_profile to set
+    :return: None
+    """
+    cpus = os.cpu_count()
+    if epp_profile in Profiles.EPP_PROFILES.profiles:
+        for cpu in range(cpus):
+            try:
+                with open(Paths.PATH_EPP.path.replace('0', f'{cpu}'), 'w') as cpu_epp:
+                    cpu_epp.write(epp_profile)
+                    cpu_epp.close()
+            except OSError:
+                log.warning(f'Cannot set EPP profile to: {epp_profile}')
+                return
+        log.info(f'EPP set to: {epp_profile}')
+
+
+def set_dpm(dpm_profile: str) -> None:
+    """
+    Sets the DPM
+    :param dpm_profile: the DPM to set
+    :return: None
+    """
+    if dpm_profile in Profiles.DPM_PROFILES.profiles:
+        try:
+            with open(DPM_PATH, 'w') as gpu_dpm:
+                gpu_dpm.write(dpm_profile)
+                gpu_dpm.close()
+        except OSError:
+            log.warning(f'Cannot set DPM profile to: {dpm_profile}')
+            return
+        log.info(f'DPM set to: {dpm_profile}')
+
+
+def match_epp_with_pp(current_pp: str):
+    current_epp = get_current_epp_profile()
+
+    if current_pp == Profiles.POWER_PLATFORM_PROFILES.profiles[0]:
+        desired_epp = Profiles.EPP_PROFILES.profiles[0]
+
+    elif current_pp == Profiles.POWER_PLATFORM_PROFILES.profiles[2]:
+        desired_epp = Profiles.EPP_PROFILES.profiles[3]
+    else:
+        if enablers_config[Enabler.USE_BALANCE_POWER.key_name] and get_battery_status() == 'Discharging':
+            desired_epp = Profiles.EPP_PROFILES.profiles[1]
+        else:
+            desired_epp = Profiles.EPP_PROFILES.profiles[2]
+
+    if desired_epp != current_epp:
+        set_epp(desired_epp)
+
+
+def match_dpm_with_pp(current_pp: str):
+    current_dpm = get_current_dpm_profile()
+    if current_dpm:
+        if enablers_config[Enabler.ALLOW_LOW_DPM.key_name] and \
+                current_pp == Profiles.POWER_PLATFORM_PROFILES.profiles[0]:
+            desired_dpm = Profiles.DPM_PROFILES.profiles[0]
+
+        elif enablers_config[Enabler.ALLOW_HIGH_DPM.key_name] and \
+                current_pp == Profiles.POWER_PLATFORM_PROFILES.profiles[2]:
+            desired_dpm = Profiles.DPM_PROFILES.profiles[2]
+        else:
+            desired_dpm = Profiles.DPM_PROFILES.profiles[1]
+
+        if desired_dpm != current_dpm:
+            set_dpm(desired_dpm)
+
+
+def match_gov_with_pp(current_pp: str):
+    current_gov = get_current_gov_profile()
+
+    if current_pp == Profiles.POWER_PLATFORM_PROFILES.profiles[0]:
+        desired_gov = Profiles.GOV_PROFILES.profiles[0]
+
+    elif current_pp == Profiles.POWER_PLATFORM_PROFILES.profiles[2]:
+        desired_gov = Profiles.GOV_PROFILES.profiles[1]
+
+    else:
+        desired_gov = Profiles.GOV_PROFILES.profiles[0]
+
+    if desired_gov != current_gov:
+        set_gov_profile(desired_gov)
+
+
+def get_info_limit(limit: int) -> str:
+    return f'{limit}.000'
+
+
+def get_argument_limit(limit: int) -> int:
+    return limit * 1000
+
+
+def get_ryzendadj_limits(pp_profile: str):
+    if pp_profile == Profiles.POWER_PLATFORM_PROFILES.profiles[0]:
+        return tdp_limits_config[TdpLimit.POWERSAVE_SLOW.key_name], tdp_limits_config[
+            TdpLimit.POWERSAVE_SUSTAINED.key_name], tdp_limits_config[TdpLimit.POWERSAVE_FAST.key_name]
+    elif pp_profile == Profiles.POWER_PLATFORM_PROFILES.profiles[2]:
+        return tdp_limits_config[TdpLimit.PERFORMANCE_SLOW.key_name], tdp_limits_config[
+            TdpLimit.PERFORMANCE_SUSTAINED.key_name], tdp_limits_config[TdpLimit.PERFORMANCE_FAST.key_name]
+    else:
+        return tdp_limits_config[TdpLimit.BALANCED_SLOW.key_name], tdp_limits_config[
+            TdpLimit.BALANCED_SUSTAINED.key_name], tdp_limits_config[TdpLimit.BALANCED_FAST.key_name]
+
+
+def get_ryzen_info():
+    """
+    Calls ryzenadj --info and returns its output
+    :return:
+    """
+    return subprocess.run(['ryzenadj', '--info'], check=True, capture_output=True).stdout
+
+
+def check_for_ryzenadj() -> bool:
+    """
+    Checks if ryzenadj --info output is valid. It does cover all edge cases, so it's suggested to run
+    ryzenadj --info manually before letting this script run ryzenadj
+    :return: True if ryzenadj is available and the output of --info is valid
+    """
+    result = False
+    if enablers_config[Enabler.MODIFY_POWERSAVE_TDP_LIMIT.key_name] is False and enablers_config[
+        Enabler.MODIFY_BALANCED_TDP_LIMIT.key_name] is False and \
+            enablers_config[Enabler.MODIFY_PERFORMANCE_TDP_LIMIT.key_name] is False:
+        return result
+    try:
+        ryzen_info = get_ryzen_info()
+        memory_access_output = subprocess.run(['grep', 'Unable to get memory access'],
+                                              input=ryzen_info, capture_output=True).stdout.decode('utf-8').strip()
+        if not memory_access_output:
+            result = True
+        else:
+            log.warning("ryzenadj is enable to get memory access. Maybe this is relevant: "
+                        " https://github.com/FlyGoat/RyzenAdj/issues/259")
+    except Exception as e:
+        log.warning(f'Could not use ryzenadj. Error: {e}')
+    return result
+
+
+def match_tdp_with_pp(current_pp: str) -> None:
+    """
+    Matches the configured TDP limits with the current PP
+    :return: None
+    """
+    try:
+        ryzen_info = get_ryzen_info()
+        output_stapm = subprocess.run(['grep', RyzenAdjLimit.STAPM.key_name],
+                                      input=ryzen_info, capture_output=True).stdout.decode('utf-8').strip()
+        output_fast = subprocess.run(['grep', RyzenAdjLimit.FAST.key_name],
+                                     input=ryzen_info, capture_output=True).stdout.decode('utf-8').strip()
+        output_slow = subprocess.run(['grep', RyzenAdjLimit.SLOW.key_name],
+                                     input=ryzen_info, capture_output=True).stdout.decode('utf-8').strip()
+        slow_limit, stapm_limit, fast_limit = get_ryzendadj_limits(current_pp)
+        stapm_limit_wrong = get_info_limit(stapm_limit) not in output_stapm
+        slow_limit_wrong = get_info_limit(slow_limit) not in output_slow
+        fast_limit_wrong = get_info_limit(fast_limit) not in output_fast
+        if stapm_limit_wrong or slow_limit_wrong or fast_limit_wrong:
+            if stapm_limit_wrong:
+                log.info(f'STAPM limit needs modifying: {output_stapm}')
+            if slow_limit_wrong:
+                log.info(f'Slow limit needs modifying: {output_slow}')
+            if fast_limit_wrong:
+                log.info(f'Fast limit needs modifying: {output_fast}')
+            subprocess.call(['ryzenadj', f'--{RyzenAdjLimit.STAPM.argument}={get_argument_limit(stapm_limit)}',
+                             f'--{RyzenAdjLimit.FAST.argument}={get_argument_limit(fast_limit)}',
+                             f'--{RyzenAdjLimit.SLOW.argument}={get_argument_limit(slow_limit)}'])
+            log.info(f"Set limits: slow {slow_limit}, sustained {stapm_limit}, fast {fast_limit}")
+    except Exception as e:
+        log.error(f"Could not use ryzenadj! Error: {e}")
+
+
+def is_pstate_active() -> bool:
+    """
+    Checks if pstate is active.
+    :return: True if active
+    """
+    active = False
+    try:
+        with open(Paths.PATH_AMD_PSTATE_STATUS.path, "r") as f:
+            status = f.read().strip()
+            f.close()
+            if status != "active":
+                log.error(f'AMD-PSTATE mode is unsupported: {status}')
+            else:
+                log.info(f'AMD-PSTATE in {status} mode')
+                active = True
+    except FileNotFoundError:
+        log.error("Path not found (is AMD-PSTATE enabled?)")
+    return active
+
+
+def should_modify_tdp(current_pp: str):
+    if current_pp == Profiles.POWER_PLATFORM_PROFILES.profiles[0]:
+        return enablers_config[Enabler.MODIFY_POWERSAVE_TDP_LIMIT.key_name]
+    elif current_pp == Profiles.POWER_PLATFORM_PROFILES.profiles[2]:
+        return enablers_config[Enabler.MODIFY_PERFORMANCE_TDP_LIMIT.key_name]
+    else:
+        return enablers_config[Enabler.MODIFY_BALANCED_TDP_LIMIT.key_name]
+
+
+def main():
+    while True:
+        current_pp = get_current_power_profile()
+        if enablers_config[Enabler.MODIFY_EPP.key_name]:
+            match_epp_with_pp(current_pp)
+        if enablers_config[Enabler.MODIFY_DPM.key_name]:
+            match_dpm_with_pp(current_pp)
+        if enablers_config[Enabler.USE_PERFORMANCE_GOVERNOR.key_name]:
+            match_gov_with_pp(current_pp)
+        if should_modify_tdp(current_pp):
+            match_tdp_with_pp(current_pp)
+        time.sleep(intervals['sleep_duration'])
+
+
+if __name__ == "__main__":
+    if UID != 0:
+        log.error("Program requires root privileges")
+        exit(1)
+    if not is_pstate_active():
+        exit(1)
+    load_config()
+    if not check_for_ryzenadj():
+        log.warning("Disabling TDP limits because ryzenadj could not be used")
+        enablers_config[Enabler.MODIFY_POWERSAVE_TDP_LIMIT.key_name] = False
+        enablers_config[Enabler.MODIFY_BALANCED_TDP_LIMIT.key_name] = False
+        enablers_config[Enabler.MODIFY_PERFORMANCE_TDP_LIMIT.key_name] = False
+    main()
