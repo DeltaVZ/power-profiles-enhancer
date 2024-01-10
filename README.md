@@ -56,7 +56,7 @@ EPP definitely helps. The others, depends.
 
 ## Installation
 
-Run ```bash install.sh``` with root privileges. A new service will be enabled: pp-enhancer.service
+Run ```bash install.sh``` with root privileges. A new service will be enabled: pp-enhancer.service. By default, every 2 seconds it will check if your system needs changes and applies them. You can configure the duration between checks and more by modifying the /etc/pp-enhancer.ini file
 
 ## Configuration explained
 
@@ -69,7 +69,7 @@ gov: governor
 ### Configuration
 
 The following is the commented pp-enhancer.ini and with default values that will be used when the .ini or any option
-is missing
+is missing. During installation, a default configuration is copied to /etc/pp-enhancer.ini. You can modify this as you wish.
 
 [enablers]
 modify_epp=true -> If true, epp will match the selected pp. You can set it to false if EPP is matched with PP via asusctl
