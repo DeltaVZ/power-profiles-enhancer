@@ -54,6 +54,10 @@ dependencies:
 Is this useful? It can be, but you should use it and judge it by yourself.
 EPP definitely helps. The others, depends.
 
+## Installation
+
+Run ```bash install.sh``` with root privileges. A new service will be enabled: pp-enhancer.service
+
 ## Configuration explained
 
 ### Acronyms:
