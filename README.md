@@ -61,10 +61,10 @@ Run ```bash install.sh``` with root privileges. A new service will be enabled: p
 ## Configuration explained
 
 ### Acronyms:
-epp: Energy Performance Preference
-pp: Power Profile
-dpm: Dynamic Power Management.
-gov: governor
+* epp: Energy Performance Preference
+* pp: Power Profile
+* dpm: Dynamic Power Management.
+* gov: governor
 
 ### Configuration
 
@@ -72,50 +72,50 @@ The following is the commented pp-enhancer.ini and with default values that will
 is missing. During installation, a default configuration is copied to /etc/pp-enhancer.ini. You can modify this as you wish.
 
 [enablers]
-modify_epp=true -> If true, epp will match the selected pp. You can set it to false if EPP is matched with PP via asusctl
+* modify_epp=true -> If true, epp will match the selected pp. You can set it to false if EPP is matched with PP via asusctl
                     and you don't want to use the balance_power profile when on battery
-modify_dpm=false  -> If true, dpm will match the selected power-profiles (pp). Allows changing of 
+* modify_dpm=false  -> If true, dpm will match the selected power-profiles (pp). Allows changing of 
                      power_dpm_force_performance_level. More info: https://dri.freedesktop.org/docs/drm/gpu/amdgpu/thermal.html
-allow_low_dpm=false -> If true, a 'low' DPM value is allowed when in power-save mode. Not suggested for iGPU lower than 780M
-allow_high_dpm=false -> If true, a 'high' DPM value is allowed when in performance mode. Unsure about how useful this is
-modify_powersave_tdp_limit=true -> If true, tdp limits are changed based on the configured tdp-limits below for the power-save profile
+* allow_low_dpm=false -> If true, a 'low' DPM value is allowed when in power-save mode. Not suggested for iGPU lower than 780M
+* allow_high_dpm=false -> If true, a 'high' DPM value is allowed when in performance mode. Unsure about how useful this is
+* modify_powersave_tdp_limit=true -> If true, tdp limits are changed based on the configured tdp-limits below for the power-save profile
                     If you want to use this option, you must install ryzenadj and make sure you can run ryzenadj --info correctly
-modify_balanced_tdp_limit=false -> If true, tdp limits are changed based on the configured tdp-limits below for the balanced profile
+* modify_balanced_tdp_limit=false -> If true, tdp limits are changed based on the configured tdp-limits below for the balanced profile
                     If you want to use this option, you must install ryzenadj and make sure you can run ryzenadj --info correctly
-modify_performance_tdp_limit=false -> If true, tdp limits are changed based on the configured tdp-limits below for the performance profile
+* modify_performance_tdp_limit=false -> If true, tdp limits are changed based on the configured tdp-limits below for the performance profile
                     If you want to use this option, you must install ryzenadj and make sure you can run ryzenadj --info correctly
-use_balance_power=true -> If true, the balance_power epp will be used when on battery instead of balance_performance
-use_performance_governor=false -> If true, the performance governor will be used when in performance mode
-ryzen_powersave_on_ac=false -> Unused, work in progress
-ryzen_performance_on_battery=false -> Unused, work in progress
+* use_balance_power=true -> If true, the balance_power epp will be used when on battery instead of balance_performance
+* use_performance_governor=false -> If true, the performance governor will be used when in performance mode
+* ryzen_powersave_on_ac=false -> Unused, work in progress
+* ryzen_performance_on_battery=false -> Unused, work in progress
 
 
 Unit: Watt. For more info 
-https://github.com/FlyGoat/RyzenAdj/wiki/Renoir-Tuning-Guide
-Fast Limit >= Slow Limit >= STAPM Limit
+https://github.com/FlyGoat/RyzenAdj/wiki/Renoir-Tuning-Guide  
+Fast Limit >= Slow Limit >= STAPM Limit  
 It's suggested not to put a limit too low.  For reference, with a 7940HS you can comfortably use 8W in power-mode on a 
-1600p screen. For a 4K screen, I need 10W.
+1600p screen. For a 4K screen, I need 10W.  
 [tdp-limits] 
-powersave_sustained_limit=10 ->  STAPM limit for power-save mode
-powersave_slow_limit=10 -> Slow limit for power-save mode
-powersave_fast_limit=10 -> Fast limit for power-save mode
-balanced_sustained_limit=45 ->  STAPM limit for balanced mode
-balanced_slow_limit=45 -> Slow limit for balanced mode
-balanced_fast_limit=45 -> Fast limit for balanced mode
-performance_sustained_limit=62 ->  STAPM limit for performance mode
-performance_slow_limit=62 -> Slow limit for performance mode
-performance_fast_limit=65 -> Fast limit for performance mode
+* powersave_sustained_limit=10 ->  STAPM limit for power-save mode
+* powersave_slow_limit=10 -> Slow limit for power-save mode
+* powersave_fast_limit=10 -> Fast limit for power-save mode
+* balanced_sustained_limit=45 ->  STAPM limit for balanced mode
+* balanced_slow_limit=45 -> Slow limit for balanced mode
+* balanced_fast_limit=45 -> Fast limit for balanced mode
+* performance_sustained_limit=62 ->  STAPM limit for performance mode
+* performance_slow_limit=62 -> Slow limit for performance mode
+* performance_fast_limit=65 -> Fast limit for performance mode
 
-Unit: seconds.
+Unit: seconds.  
 [intervals]
-sleep_duration=2 -> The service will sleep for this configured amount of seconds between checks of changes
+* sleep_duration=2 -> The service will sleep for this configured amount of seconds between checks of changes
                     of the power profile
 
 
 The following is for paths that can change based on the system in use. Simply find out the location of 
-power_dpm_force_performance_level on your system and add the DPM config
-[paths]
-# For GA402RJ with 6900HS:
-#DPM=/sys/class/drm/card2/device/power_dpm_force_performance_level
-# For GA402XY 2023 with 7940HS:
-#DPM=/sys/class/drm/card0/device/power_dpm_force_performance_level
+power_dpm_force_performance_level on your system and add the DPM config  
+[paths]  
+#For GA402RJ with 6900HS:
+* #DPM=/sys/class/drm/card2/device/power_dpm_force_performance_level  
+#For GA402XY 2023 with 7940HS:
+* #DPM=/sys/class/drm/card0/device/power_dpm_force_performance_level
