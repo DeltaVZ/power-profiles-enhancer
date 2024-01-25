@@ -1,7 +1,7 @@
 ## Power Profiles Enhancer
 
 This was a personal fork of https://github.com/marcinx64/pp-to-amd-epp/tree/main and then evolved out of its
-scope, thus pp-enhancer was born.
+scope, thus power-profiles-enhancer was born.
 
 From kernel 6.5+ there's AMD-PSTATE in active mode as default CPU driver on ZEN2+ machines
 
