@@ -15,14 +15,14 @@ if [ ! -d "$DIR" ]; then
 fi
 
 # Copy files
-cp "$PWD"/pp-enhancer.service /etc/systemd/system
-cp "$PWD"/pp-enhancer /usr/local/bin
-cp "$PWD"/pp-enhancer.ini /etc
+cp "$PWD"/power-profiles-enhancer.service /etc/systemd/system
+cp "$PWD"/power-profiles-enhancer /usr/local/bin
+cp "$PWD"/power-profiles-enhancer.ini /etc
 
 # Set permissions
-chown root:root /usr/local/bin/pp-enhancer /etc/systemd/system/pp-enhancer.service /etc/pp-enhancer.ini
-chmod 655 /usr/local/bin/pp-enhancer /etc/systemd/system/pp-enhancer.service /etc/pp-enhancer.ini
-chmod +x /usr/local/bin/pp-enhancer
+chown root:root /usr/local/bin/power-profiles-enhancer /etc/systemd/system/power-profiles-enhancer.service /etc/power-profiles-enhancer.ini
+chmod 655 /usr/local/bin/power-profiles-enhancer /etc/systemd/system/power-profiles-enhancer.service /etc/power-profiles-enhancer.ini
+chmod +x /usr/local/bin/power-profiles-enhancer
 
 # Enable systemd service
-systemctl enable --now pp-enhancer.service
+systemctl enable --now power-profiles-enhancer.service

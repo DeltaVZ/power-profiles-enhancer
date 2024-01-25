@@ -7,7 +7,7 @@ After=power-profiles-daemon.service
 Type=simple
 Restart=on-failure
 User=root
-ExecStart=python3 /usr/local/bin/pp-enhancer
+ExecStart=python3 /usr/local/bin/power-profiles-enhancer
 
 [Install]
 WantedBy=multi-user.target
