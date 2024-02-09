@@ -37,10 +37,9 @@ class Enabler(Enum):
     MODIFY_PERFORMANCE_TDP_LIMIT = 'modify_performance_tdp_limit', False
     USE_BALANCE_POWER = 'use_balance_power', False
     USE_PERFORMANCE_GOVERNOR = 'use_performance_governor', False
+    RYZENADJ_POWERSAVING = 'ryzenadj_powersaving', True
+    RYZENADJ_MAX_PERFORMANCE = 'ryzenadj_max_performance', True
     # Currently unused
-    RYZEN_POWERSAVE_ON_AC = 'ryzen_powersave_on_ac', False
-    # Currently unused
-    RYZEN_PERFORMANCE_ON_BATTERY = 'ryzen_performance_on_battery', False
     ENABLE_BOOST = 'enable_boost', True
 
     def __init__(self, key_name: str, default_value: bool):
@@ -57,10 +56,10 @@ class Enabler(Enum):
         :return: None or the ryzenadj argument
         """
         argument = None
-        if self == Enabler.RYZEN_POWERSAVE_ON_AC:
-            argument = 'powersave'
-        elif self == Enabler.RYZEN_PERFORMANCE_ON_BATTERY:
-            argument = 'performance'
+        if self == Enabler.RYZENADJ_POWERSAVING:
+            argument = 'power-saving'
+        elif self == Enabler.RYZENADJ_MAX_PERFORMANCE:
+            argument = 'max-performance'
         return argument
 
 
@@ -474,9 +473,16 @@ def match_tdp_with_pp(current_pp: str) -> None:
                 log.info(f'Slow limit needs modifying: {output_slow}')
             if fast_limit_wrong:
                 log.info(f'Fast limit needs modifying: {output_fast}')
-            subprocess.call(['ryzenadj', f'--{RyzenAdjLimit.STAPM.argument}={get_argument_limit(stapm_limit)}',
-                             f'--{RyzenAdjLimit.FAST.argument}={get_argument_limit(fast_limit)}',
-                             f'--{RyzenAdjLimit.SLOW.argument}={get_argument_limit(slow_limit)}'])
+            command = ['ryzenadj', f'--{RyzenAdjLimit.STAPM.argument}={get_argument_limit(stapm_limit)}',
+                       f'--{RyzenAdjLimit.FAST.argument}={get_argument_limit(fast_limit)}',
+                       f'--{RyzenAdjLimit.SLOW.argument}={get_argument_limit(slow_limit)}']
+            if (current_pp == Profiles.POWER_PLATFORM_PROFILES.profiles[0] and
+                    enablers_config[Enabler.RYZENADJ_POWERSAVING.key_name]):
+                command.append(f'--{Enabler.RYZENADJ_POWERSAVING.ryzenadj_argument()}')
+            elif (current_pp == Profiles.POWER_PLATFORM_PROFILES.profiles[2] and
+                  enablers_config[Enabler.RYZENADJ_MAX_PERFORMANCE.key_name]):
+                command.append(f'--{Enabler.RYZENADJ_MAX_PERFORMANCE.ryzenadj_argument()}')
+            subprocess.call(command)
             log.info(f"Set limits: slow {slow_limit}, sustained {stapm_limit}, fast {fast_limit}")
     except Exception as e:
         log.error(f"Could not use ryzenadj! Error: {e}")

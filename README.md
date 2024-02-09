@@ -88,8 +88,8 @@ modify_powersave_tdp_limit=true -> If true, tdp limits are changed based on the 
                     If you want to use this option, you must install ryzenadj and make sure you can run ryzenadj --info correctly
 * use_balance_power=true -> If true, the balance_power epp will be used when on battery instead of balance_performance
 * use_performance_governor=false -> If true, the performance governor will be used when in performance mode
-* ryzen_powersave_on_ac=false -> Unused, work in progress
-* ryzen_performance_on_battery=false -> Unused, work in progress
+* ryzen_powersave_on_ac=true -> Will append --power-saving to the TDP limit command when in powersave mode. Requires modify_powersave_tdp_limit=true
+* ryzen_performance_on_battery=false -> Will append --max-performance to the TDP limit command when in performance mode. Requires modify_performance_tdp_limit=false
 
 
 Unit: Watt. For more info 
